@@ -1,0 +1,17 @@
+{
+  "name": "assignment-1-automation",
+  "version": "1.0.0",
+  "description": "Playwright automation for SwiftTranslator (Assignment 1)",
+  "scripts": {
+    "test": "npx playwright test",
+    "test:headed": "npx playwright test --headed",
+    "report": "npx playwright show-report"
+  },
+  "keywords": [],
+  "author": "IT23821972",
+  "license": "ISC",
+  "devDependencies": {
+    "@playwright/test": "^1.40.0",
+    "xlsx": "^0.18.5"
+  }
+}
