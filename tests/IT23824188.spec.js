@@ -9,6 +9,10 @@ const { loadTestCasesFromXlsx } = require('./testCaseLoader');
 const testCases = loadTestCasesFromXlsx(path.join(__dirname, '..', 'csv', 'IT23824188.ITPMnew.xlsx'));
 if (testCases.length === 0) throw new Error('No test cases loaded from the Excel file.');
 
+function normalizeText(text) {
+  return String(text ?? '').replace(/\s+/g, ' ').trim();
+}
+
 for (const data of testCases) {
   test(`${data.id}: ${data.category}`, async ({ page }) => {
     // FIX: Use baseURL from config and wait for DOM to be ready.
@@ -18,16 +22,18 @@ for (const data of testCases) {
     // FIX: Correct selectors (site uses a textbox + output text element, not two textareas).
     const input = page.getByPlaceholder('Input Your Singlish Text Here.');
     const output = page.getByText('Sinhala', { exact: true }).locator('xpath=following-sibling::*[1]');
-    await input.fill(data.input);
+    // FIX: Excel uses "(no input)" marker for cleared input scenarios.
+    const inputValue = normalizeText(data.input).toLowerCase() === '(no input)' ? '' : data.input;
+    // FIX: Excel uses "(no input)" marker for expected output of empty-state scenarios.
+    const expectedValue = normalizeText(data.expected).toLowerCase() === '(no input)' ? '' : data.expected;
+    await input.fill(inputValue);
 
     // Wait for completion
     // FIX: Output updates in real-time (no submit button) so we wait for stable expected output.
-    if (data.id.startsWith('Neg_')) {
-      await expect(output).not.toHaveText('', { timeout: 15000 });
+    if (normalizeText(inputValue) === '') {
+      await expect(output).toHaveText('', { timeout: 15000 });
     } else {
-      await expect
-        .poll(async () => (await output.textContent())?.trim() ?? '', { timeout: 15000 })
-        .toContain(data.expected);
+      await expect(output).not.toHaveText('', { timeout: 15000 });
     }
 
     const imagePath = path.join('screenshots', data.category, `${data.id}.png`);
@@ -37,13 +43,24 @@ for (const data of testCases) {
 
     // Grab the translated text from the output area
     const outputText = (await output.textContent()) ?? '';
+    await test.info().attach(`${data.id}-input`, { body: String(inputValue), contentType: 'text/plain' });
+    await test.info().attach(`${data.id}-expected`, { body: String(expectedValue), contentType: 'text/plain' });
+    await test.info().attach(`${data.id}-actual`, { body: String(outputText), contentType: 'text/plain' });
 
     if (data.id.startsWith('Neg_')) {
-      // FIX: Negative cases should demonstrate a mismatch (system fails/behaves incorrectly).
-      expect(outputText.trim()).not.toBe(data.expected.trim());
+      // FIX: Negative cases should FAIL when the system does not match the expected output.
+      if (normalizeText(inputValue) === '' && normalizeText(expectedValue) === '') {
+        expect(normalizeText(outputText)).toBe('');
+      } else {
+        expect(normalizeText(outputText)).toContain(normalizeText(expectedValue));
+      }
     } else {
       // Positive cases must contain the expected translation
-      expect(outputText).toContain(data.expected);
+      if (normalizeText(inputValue) === '' && normalizeText(expectedValue) === '') {
+        expect(normalizeText(outputText)).toBe('');
+      } else {
+        expect(normalizeText(outputText)).toContain(normalizeText(expectedValue));
+      }
     }
   });
 }
